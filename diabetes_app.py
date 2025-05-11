@@ -17,7 +17,7 @@ sns.set(style="whitegrid")
 # Load dataset function
 @st.cache_data
 def load_data():
-    df = pd.read_csv("E:\downloads\diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
+    df = pd.read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
     return df
 
 # Main function
