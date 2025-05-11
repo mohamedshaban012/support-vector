@@ -11,7 +11,6 @@ from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
-import io
 
 # Set page config
 st.set_page_config(
@@ -23,15 +22,12 @@ st.set_page_config(
 # Set plot style
 sns.set(style="whitegrid")
 
-# Sample data URL (you should replace this with your actual data source)
-DATA_URL = "https://raw.githubusercontent.com/mohamedshaban012/support-vector/main/diabetes_binary_5050split_health_indicators_BRFSS2015.csv"
-
 # Load dataset function
 @st.cache_data
 def load_data():
     try:
-        # Load the dataset from URL
-        df = pd.read_csv(DATA_URL)
+        # Load the provided dataset
+        df = pd.read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
         
         # No need to convert since it's already binary
         st.success("Dataset loaded successfully!")
@@ -158,9 +154,9 @@ def train_and_evaluate_model(df):
     ax.legend(loc="lower right")
     st.pyplot(fig)
     
-    return grid_search.best_estimator_, selector, pca, selected_features, X.columns
+    return grid_search.best_estimator_, selector, pca, selected_features
 
-def show_prediction(model, selector, pca, selected_features, all_features, df):
+def show_prediction(model, selector, pca, selected_features):
     st.header("Diabetes Risk Prediction")
     
     st.subheader("Make a Prediction")
@@ -218,7 +214,7 @@ def show_prediction(model, selector, pca, selected_features, all_features, df):
     
     # Create input dataframe with ALL features in correct order
     input_data = {}
-    for feature in all_features:
+    for feature in df.columns:
         if feature == 'Diabetes_binary':
             continue
         if feature in inputs:  # If user provided this feature
@@ -227,7 +223,7 @@ def show_prediction(model, selector, pca, selected_features, all_features, df):
             input_data[feature] = default_values.get(feature, 0)
     
     # Convert to DataFrame with same column order as original data
-    input_df = pd.DataFrame([input_data])[all_features.drop('Diabetes_binary')]
+    input_df = pd.DataFrame([input_data])[df.drop('Diabetes_binary', axis=1).columns]
     
     # Make prediction
     if st.button("Predict Diabetes Risk"):
@@ -259,6 +255,7 @@ def main():
     """)
     
     # Load data
+    global df
     df = load_data()
     
     if df is None:
@@ -279,13 +276,11 @@ def main():
         show_feature_analysis(df)
     elif page == "Model Training":
         if 'model' not in st.session_state:
-            model, selector, pca, selected_features, all_features = train_and_evaluate_model(df)
+            model, selector, pca, selected_features = train_and_evaluate_model(df)
             st.session_state['model'] = model
             st.session_state['selector'] = selector
             st.session_state['pca'] = pca
             st.session_state['selected_features'] = selected_features
-            st.session_state['all_features'] = all_features
-            st.session_state['df'] = df  # Store df in session state
         else:
             st.info("Model already trained. Go to Prediction page.")
     elif page == "Prediction":
@@ -296,9 +291,7 @@ def main():
                 st.session_state['model'],
                 st.session_state['selector'],
                 st.session_state['pca'],
-                st.session_state['selected_features'],
-                st.session_state['all_features'],
-                st.session_state['df']
+                st.session_state['selected_features']
             )
 
 if __name__ == "__main__":
