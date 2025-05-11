@@ -84,7 +84,7 @@ def show_data_overview(df):
         'Education': 'Education level (1-6)',
         'Income': 'Income category (1-8)'
     }
-    st.table(pd.DataFrame.from_dict(feature_desc, orient='index').rename(columns={0: 'Description'})
+    st.table(pd.DataFrame.from_dict(feature_desc, orient='index').rename(columns={0: 'Description'}))
 
 def show_eda(df):
     st.header("2. Exploratory Data Analysis")
