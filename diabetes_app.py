@@ -24,7 +24,7 @@ def load_data():
 def create_input_widget(col, series):
     """Helper function to create appropriate input widget based on data type"""
     if series.nunique() <= 2:  # Binary feature
-        return st.selectbox(col, sorted(series.unique()), "select"
+        return st.selectbox(col, sorted(series.unique())), "select"
     else:  # Numeric feature
         min_val = float(series.min())
         max_val = float(series.max())
@@ -158,9 +158,7 @@ def main():
         cols = st.columns(3)  # Create 3 columns for better layout
         
         # Organize features into columns
-        features_per_col = (len(X.columns) // 3
-        if len(X.columns) % 3 != 0:
-            features_per_col += 1
+        features_per_col = (len(X.columns) + 2) // 3  # Ensure even distribution
         
         for i, col in enumerate(X.columns):
             # Determine which column to use
