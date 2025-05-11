@@ -1,12 +1,12 @@
-import streamlit as st # type: ignore
-import pandas as pd # type: ignore
-import numpy as np # type: ignore
-import matplotlib.pyplot as plt # type: ignore
-import seaborn as sns # type: ignore
-from sklearn.preprocessing import StandardScaler # type: ignore
-from sklearn.model_selection import train_test_split # type: ignore
-from sklearn.ensemble import RandomForestClassifier # type: ignore
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix # type: ignore
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Set page config
 st.set_page_config(page_title="Diabetes Prediction", page_icon="🩺", layout="wide")
@@ -43,7 +43,9 @@ def main():
         st.write(df.head())
         
         st.write("\nDataset Info:")
-        st.write(df.info())
+        buffer = io.StringIO()
+        df.info(buf=buffer)
+        st.text(buffer.getvalue())
         
         st.subheader("Summary Statistics")
         st.write(df.describe())
@@ -67,7 +69,10 @@ def main():
         
         # Plot distribution by diabetes status
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.boxplot(x='Diabetes_binary', y=feature, data=df, ax=ax)
+        if df[feature].nunique() <= 2:
+            sns.countplot(x=feature, hue='Diabetes_binary', data=df, ax=ax)
+        else:
+            sns.boxplot(x='Diabetes_binary', y=feature, data=df, ax=ax)
         plt.title(f'Distribution of {feature} by Diabetes Status')
         plt.xlabel('Diabetes (0 = No, 1 = Yes)')
         plt.ylabel(feature)
@@ -179,4 +184,5 @@ def main():
                 st.success(f"Low risk of diabetes (probability: {probability:.2%})")
 
 if __name__ == "__main__":
+    import io
     main()
