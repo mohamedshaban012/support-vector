@@ -26,10 +26,14 @@ sns.set(style="whitegrid")
 @st.cache_data
 def load_data():
     try:
-        # Load the provided dataset
-        df = pd.read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
+        # Using the large BRFSS 2015 dataset
+        url = "https://raw.githubusercontent.com/sonali-rai/SVM-Diabetes-Prediction/main/diabetes_012_health_indicators_BRFSS2015.csv"
+        df = pd.read_csv(url)
         
-        # No need to convert since it's already binary
+        # Convert to binary classification (0 = no diabetes, 1 = prediabetes or diabetes)
+        df['Diabetes_binary'] = df['Diabetes_012'].apply(lambda x: 0 if x == 0 else 1)
+        df = df.drop('Diabetes_012', axis=1)
+        
         st.success("Dataset loaded successfully!")
         return df
         
@@ -251,7 +255,7 @@ def main():
     st.title("Diabetes Prediction App")
     st.write("""
     This app analyzes health indicators to predict diabetes risk using SVM.
-    The dataset is a balanced 50-50 split of diabetes cases from BRFSS 2015 survey.
+    The dataset is from the BRFSS 2015 survey with over 250,000 records.
     """)
     
     # Load data
