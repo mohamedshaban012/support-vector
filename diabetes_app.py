@@ -1,25 +1,15 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.svm import SVC
-from sklearn.metrics import (accuracy_score, classification_report, 
-                           confusion_matrix, roc_curve, auc)
-from sklearn.decomposition import PCA
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.feature_selection import SelectKBest, f_classif
-import plotly.express as px
+import streamlit as st # type: ignore
+import pandas as pd # type: ignore
+import numpy as np # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+import seaborn as sns # type: ignore
+from sklearn.preprocessing import StandardScaler # type: ignore
+from sklearn.model_selection import train_test_split # type: ignore
+from sklearn.ensemble import RandomForestClassifier # type: ignore
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix # type: ignore
 
 # Set page config
-st.set_page_config(
-    page_title="SVM Diabetes Prediction App",
-    page_icon="🩺",
-    layout="wide"
-)
+st.set_page_config(page_title="Diabetes Prediction", page_icon="🩺", layout="wide")
 
 # Set plot style
 sns.set(style="whitegrid")
@@ -27,278 +17,166 @@ sns.set(style="whitegrid")
 # Load dataset function
 @st.cache_data
 def load_data():
-    try:
-        # Using a large diabetes dataset (130,000+ records)
-        url = "https://raw.githubusercontent.com/sonali-rai/SVM-Diabetes-Prediction/main/diabetes_012_health_indicators_BRFSS2015.csv"
-        df = pd.read_csv(url)
-        
-        # Rename target column
-        df = df.rename(columns={'Diabetes_012': 'Diabetes_binary'})
-        
-        # Convert to binary classification (0 = no diabetes, 1 = prediabetes or diabetes)
-        df['Diabetes_binary'] = df['Diabetes_binary'].apply(lambda x: 0 if x == 0 else 1)
-        
-        st.success("Dataset loaded successfully!")
-        return df
-        
-    except Exception as e:
-        st.error(f"Failed to load data: {str(e)}")
-        return None
+    df = pd.read_csv("E:\downloads\diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
+    return df
 
-def show_data_overview(df):
-    st.header("1. Dataset Overview")
-    
-    st.subheader("Basic Information")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write(f"Number of records: {df.shape[0]:,}")
-        st.write(f"Number of features: {df.shape[1]}")
-    with col2:
-        st.write(f"Target distribution:\n{df['Diabetes_binary'].value_counts(normalize=True)}")
-    
-    st.subheader("First 5 Rows")
-    st.write(df.head())
-    
-    st.subheader("Feature Descriptions")
-    feature_desc = {
-        'Diabetes_binary': 'Target (0 = No diabetes, 1 = Prediabetes or Diabetes)',
-        'HighBP': 'High blood pressure',
-        'HighChol': 'High cholesterol',
-        'CholCheck': 'Cholesterol check in past 5 years',
-        'BMI': 'Body Mass Index',
-        'Smoker': 'Have smoked at least 100 cigarettes',
-        'Stroke': 'Ever had a stroke',
-        'HeartDiseaseorAttack': 'Coronary heart disease or heart attack',
-        'PhysActivity': 'Physical activity in past 30 days',
-        'Fruits': 'Consume fruit daily',
-        'Veggies': 'Consume vegetables daily',
-        'HvyAlcoholConsump': 'Heavy alcohol consumption',
-        'AnyHealthcare': 'Have any healthcare coverage',
-        'NoDocbcCost': 'Could not see doctor due to cost',
-        'GenHlth': 'General health (1=excellent to 5=poor)',
-        'MentHlth': 'Days of poor mental health (past 30 days)',
-        'PhysHlth': 'Days of poor physical health (past 30 days)',
-        'DiffWalk': 'Difficulty walking or climbing stairs',
-        'Sex': '0=Female, 1=Male',
-        'Age': 'Age category (1-13)',
-        'Education': 'Education level (1-6)',
-        'Income': 'Income category (1-8)'
-    }
-    st.table(pd.DataFrame.from_dict(feature_desc, orient='index').rename(columns={0: 'Description'})
-
-def show_eda(df):
-    st.header("2. Exploratory Data Analysis")
-    
-    st.subheader("Missing Values Analysis")
-    st.write(df.isnull().sum())
-    
-    st.subheader("Correlation Matrix (Top 10 Features)")
-    corr_matrix = df.corr().abs()
-    top_features = corr_matrix['Diabetes_binary'].sort_values(ascending=False).index[:10]
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(df[top_features].corr(), annot=True, cmap='coolwarm', ax=ax)
-    st.pyplot(fig)
-    
-    st.subheader("Feature Distributions")
-    feature = st.selectbox("Select feature to visualize", df.columns[:-1])
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        fig1 = px.histogram(df, x=feature, color='Diabetes_binary', 
-                          title=f'Distribution of {feature}')
-        st.plotly_chart(fig1)
-    with col2:
-        fig2 = px.box(df, x='Diabetes_binary', y=feature, 
-                     title=f'{feature} by Diabetes Status')
-        st.plotly_chart(fig2)
-
-def preprocess_data(df):
-    st.header("3. Data Preprocessing")
-    
-    # Handle missing values
-    st.subheader("Missing Values Treatment")
-    imputer = SimpleImputer(strategy='median')
-    df_imputed = pd.DataFrame(imputer.fit_transform(df), columns=df.columns)
-    
-    # Feature selection
-    st.subheader("Feature Selection")
-    X = df_imputed.drop('Diabetes_binary', axis=1)
-    y = df_imputed['Diabetes_binary']
-    
-    selector = SelectKBest(f_classif, k=15)
-    X_selected = selector.fit_transform(X, y)
-    selected_features = X.columns[selector.get_support()]
-    st.write("Selected Features:", list(selected_features))
-    
-    # Dimensionality reduction
-    st.subheader("Dimensionality Reduction with PCA")
-    pca = PCA(n_components=0.95)  # Retain 95% variance
-    X_pca = pca.fit_transform(X_selected)
-    st.write(f"Reduced from {X_selected.shape[1]} to {X_pca.shape[1]} components")
-    
-    # Plot explained variance
-    fig = px.bar(x=range(1, pca.n_components_+1), 
-                y=pca.explained_variance_ratio_,
-                labels={'x': 'Principal Component', 'y': 'Variance Explained'},
-                title='PCA Explained Variance')
-    st.plotly_chart(fig)
-    
-    return X_pca, y, selected_features
-
-def train_svm(X, y):
-    st.header("4. SVM Model Development")
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y)
-    
-    # Create pipeline
-    pipeline = Pipeline([
-        ('scaler', StandardScaler()),
-        ('svm', SVC(probability=True, random_state=42))
-    ])
-    
-    # Hyperparameter tuning
-    st.subheader("Hyperparameter Tuning")
-    param_grid = {
-        'svm__C': [0.1, 1, 10],
-        'svm__kernel': ['linear', 'rbf'],
-        'svm__gamma': ['scale', 'auto']
-    }
-    
-    grid_search = GridSearchCV(pipeline, param_grid, cv=3, n_jobs=-1, verbose=1)
-    with st.spinner('Training SVM with Grid Search...'):
-        grid_search.fit(X_train, y_train)
-    
-    st.write("Best Parameters:", grid_search.best_params_)
-    
-    # Evaluate model
-    st.subheader("Model Evaluation")
-    y_pred = grid_search.predict(X_test)
-    y_proba = grid_search.predict_proba(X_test)[:, 1]
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("Classification Report:")
-        st.text(classification_report(y_test, y_pred))
-    with col2:
-        st.write("Confusion Matrix:")
-        cm = confusion_matrix(y_test, y_pred)
-        fig, ax = plt.subplots()
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
-        st.pyplot(fig)
-    
-    # ROC Curve
-    st.subheader("ROC Curve")
-    fpr, tpr, _ = roc_curve(y_test, y_proba)
-    roc_auc = auc(fpr, tpr)
-    
-    fig = px.area(
-        x=fpr, y=tpr,
-        title=f'ROC Curve (AUC = {roc_auc:.2f})',
-        labels=dict(x='False Positive Rate', y='True Positive Rate'))
-    fig.add_shape(type='line', line=dict(dash='dash'),
-                 x0=0, x1=1, y0=0, y1=1)
-    st.plotly_chart(fig)
-    
-    return grid_search.best_estimator_
-
-def prediction_interface(model, selected_features):
-    st.header("5. Prediction Interface")
-    
-    st.subheader("Make a Prediction")
-    st.write("Enter values for the following features:")
-    
-    inputs = {}
-    cols = st.columns(3)
-    
-    feature_ranges = {
-        'HighBP': (0, 1),
-        'HighChol': (0, 1),
-        'BMI': (12, 98),
-        'HeartDiseaseorAttack': (0, 1),
-        'GenHlth': (1, 5),
-        'PhysHlth': (0, 30),
-        'DiffWalk': (0, 1),
-        'Age': (1, 13),
-        'Education': (1, 6),
-        'Income': (1, 8)
-    }
-    
-    for i, feature in enumerate(selected_features[:10]):  # Show first 10 for space
-        with cols[i % 3]:
-            if feature in feature_ranges:
-                min_val, max_val = feature_ranges[feature]
-                inputs[feature] = st.slider(
-                    feature, min_val, max_val, (min_val + max_val) // 2)
-            else:
-                inputs[feature] = st.number_input(feature, value=0)
-    
-    if st.button("Predict Diabetes Risk"):
-        try:
-            # Create input array
-            input_data = np.zeros(len(selected_features))
-            for i, feat in enumerate(selected_features):
-                input_data[i] = inputs.get(feat, 0)
-            
-            # Scale and predict
-            prediction = model.predict([input_data])[0]
-            probability = model.predict_proba([input_data])[0][1]
-            
-            if prediction == 1:
-                st.error(f"High risk of diabetes ({probability:.1%} probability)")
-                st.info("Recommendation: Consult with a healthcare professional.")
-            else:
-                st.success(f"Low risk of diabetes ({probability:.1%} probability)")
-                st.info("Recommendation: Maintain healthy lifestyle habits.")
-                
-        except Exception as e:
-            st.error(f"Prediction failed: {str(e)}")
-
+# Main function
 def main():
-    st.title("SVM Diabetes Prediction System")
+    st.title("Diabetes Prediction App")
     st.write("""
-    A complete pipeline for diabetes prediction using Support Vector Machines (SVM)
+    This app analyzes health indicators to predict diabetes risk.
+    The dataset is from the BRFSS 2015 survey with a 50-50 split of diabetes cases.
     """)
     
     # Load data
     df = load_data()
-    if df is None:
-        st.stop()
     
-    # Sidebar navigation
+    # Sidebar options
     st.sidebar.header("Navigation")
-    page = st.sidebar.radio("Go to", [
-        "1. Dataset Overview",
-        "2. Exploratory Data Analysis",
-        "3. Data Preprocessing",
-        "4. SVM Model Development",
-        "5. Prediction Interface"
-    ])
+    page = st.sidebar.radio("Go to", ["Data Exploration", "Feature Analysis", "Prediction"])
     
-    if page == "1. Dataset Overview":
-        show_data_overview(df)
-    elif page == "2. Exploratory Data Analysis":
-        show_eda(df)
-    elif page == "3. Data Preprocessing":
-        X, y, selected_features = preprocess_data(df)
-        st.session_state['X'] = X
-        st.session_state['y'] = y
-        st.session_state['selected_features'] = selected_features
-    elif page == "4. SVM Model Development":
-        if 'X' not in st.session_state:
-            st.warning("Please complete Data Preprocessing first")
-        else:
-            model = train_svm(st.session_state['X'], st.session_state['y'])
-            st.session_state['model'] = model
-    elif page == "5. Prediction Interface":
-        if 'model' not in st.session_state:
-            st.warning("Please train the model first")
-        else:
-            prediction_interface(
-                st.session_state['model'],
-                st.session_state['selected_features']
-            )
+    if page == "Data Exploration":
+        st.header("Data Exploration")
+        
+        st.subheader("Dataset Overview")
+        st.write("First 5 rows of the dataset:")
+        st.write(df.head())
+        
+        st.write("\nDataset Info:")
+        st.write(df.info())
+        
+        st.subheader("Summary Statistics")
+        st.write(df.describe())
+        
+        st.subheader("Missing Values")
+        st.write(df.isnull().sum())
+        
+        st.subheader("Class Distribution")
+        fig, ax = plt.subplots(figsize=(6, 4))
+        sns.countplot(x='Diabetes_binary', data=df, ax=ax)
+        plt.title('Distribution of Diabetes')
+        plt.xlabel('Diabetes (0 = No, 1 = Yes)')
+        plt.ylabel('Count')
+        st.pyplot(fig)
+        
+    elif page == "Feature Analysis":
+        st.header("Feature Analysis")
+        
+        # Select feature to analyze
+        feature = st.selectbox("Select feature to analyze", df.columns[1:])
+        
+        # Plot distribution by diabetes status
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.boxplot(x='Diabetes_binary', y=feature, data=df, ax=ax)
+        plt.title(f'Distribution of {feature} by Diabetes Status')
+        plt.xlabel('Diabetes (0 = No, 1 = Yes)')
+        plt.ylabel(feature)
+        st.pyplot(fig)
+        
+        # Correlation with diabetes
+        corr = df[['Diabetes_binary', feature]].corr().iloc[0,1]
+        st.write(f"Correlation with diabetes: {corr:.2f}")
+        
+    elif page == "Prediction":
+        st.header("Diabetes Risk Prediction")
+        
+        # Prepare data for modeling
+        X = df.drop('Diabetes_binary', axis=1)
+        y = df['Diabetes_binary']
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Scale features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        # Train model
+        model = RandomForestClassifier(random_state=42)
+        model.fit(X_train_scaled, y_train)
+        
+        # Make predictions
+        y_pred = model.predict(X_test_scaled)
+        
+        # Display metrics
+        st.subheader("Model Performance")
+        accuracy = accuracy_score(y_test, y_pred)
+        st.write(f"Accuracy: {accuracy:.2f}")
+        
+        st.write("\nClassification Report:")
+        report = classification_report(y_test, y_pred, output_dict=True)
+        st.table(pd.DataFrame(report).transpose())
+        
+        st.write("\nConfusion Matrix:")
+        cm = confusion_matrix(y_test, y_pred)
+        fig, ax = plt.subplots()
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        st.pyplot(fig)
+        
+        # Feature importance
+        st.subheader("Feature Importance")
+        importance = pd.DataFrame({
+            'Feature': X.columns,
+            'Importance': model.feature_importances_
+        }).sort_values('Importance', ascending=False)
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        sns.barplot(x='Importance', y='Feature', data=importance.head(10), ax=ax)
+        plt.title('Top 10 Important Features')
+        st.pyplot(fig)
+        
+        # Prediction form
+        st.subheader("Make a Prediction")
+        st.write("Enter health indicators to predict diabetes risk:")
+        
+        # Create input fields for top 5 features
+        top_features = importance['Feature'].head(5).tolist()
+        inputs = {}
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            for feature in top_features[:3]:
+                if df[feature].nunique() == 2:  # Binary feature
+                    inputs[feature] = st.selectbox(feature, [0, 1])
+                else:
+                    min_val = int(df[feature].min())
+                    max_val = int(df[feature].max())
+                    inputs[feature] = st.slider(feature, min_val, max_val)
+        
+        with col2:
+            for feature in top_features[3:5]:
+                if df[feature].nunique() == 2:  # Binary feature
+                    inputs[feature] = st.selectbox(feature, [0, 1])
+                else:
+                    min_val = int(df[feature].min())
+                    max_val = int(df[feature].max())
+                    inputs[feature] = st.slider(feature, min_val, max_val)
+        
+        # Add remaining features with default values
+        for feature in X.columns:
+            if feature not in inputs:
+                inputs[feature] = 0  # Default value
+        
+        # Create dataframe from inputs
+        input_df = pd.DataFrame([inputs])
+        
+        # Make prediction
+        if st.button("Predict Diabetes Risk"):
+            # Scale input
+            input_scaled = scaler.transform(input_df)
+            
+            # Get prediction and probability
+            prediction = model.predict(input_scaled)[0]
+            probability = model.predict_proba(input_scaled)[0][1]
+            
+            if prediction == 1:
+                st.error(f"High risk of diabetes (probability: {probability:.2%})")
+            else:
+                st.success(f"Low risk of diabetes (probability: {probability:.2%})")
 
 if __name__ == "__main__":
     main()
