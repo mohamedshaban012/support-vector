@@ -24,7 +24,7 @@ def load_data():
 def create_input_widget(col, series):
     """Helper function to create appropriate input widget based on data type"""
     if series.nunique() <= 2:  # Binary feature
-        return st.selectbox(col, sorted(series.unique())), "select"
+        return st.selectbox(col, sorted(series.unique()))
     else:  # Numeric feature
         min_val = float(series.min())
         max_val = float(series.max())
@@ -32,96 +32,84 @@ def create_input_widget(col, series):
         
         # Handle case where min and max are equal
         if min_val == max_val:
-            return min_val, "fixed"
+            st.write(f"{col}: {value} (fixed value)")
+            return value
         
         step = 1.0 if series.dtype == 'float64' else 1.0
-        return st.slider(col, min_val, max_val, value, step=step), "slider"
+        return st.slider(col, min_val, max_val, value, step=step)
 
 def main():
-    st.title("Diabetes Prediction App")
+    st.title("Diabetes Prediction App (Top 5 Features)")
     st.write("""
-    This app analyzes health indicators to predict diabetes risk.
-    The dataset is from the BRFSS 2015 survey with a 50-50 split of diabetes cases.
+    This app analyzes the most important health indicators to predict diabetes risk.
+    The model uses only the top 5 most predictive features from the BRFSS 2015 survey.
     """)
     
     # Load data
     df = load_data()
     
+    # Prepare data for modeling
+    X = df.drop('Diabetes_binary', axis=1)
+    y = df['Diabetes_binary']
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Train model to get feature importance
+    model = RandomForestClassifier(random_state=42)
+    model.fit(X_train, y_train)
+    
+    # Get top 5 features
+    importance = pd.DataFrame({
+        'Feature': X.columns,
+        'Importance': model.feature_importances_
+    }).sort_values('Importance', ascending=False)
+    
+    top_5_features = importance['Feature'].head(5).tolist()
+    X_top5 = X[top_5_features]
+    
+    # Retrain model with top 5 features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_top5)
+    X_test_scaled = scaler.transform(X_test[top_5_features])
+    
+    model_top5 = RandomForestClassifier(random_state=42)
+    model_top5.fit(X_train_scaled, y_train)
+    
     # Sidebar options
     st.sidebar.header("Navigation")
-    page = st.sidebar.radio("Go to", ["Data Exploration", "Feature Analysis", "Prediction"])
+    page = st.sidebar.radio("Go to", ["Feature Importance", "Model Performance", "Prediction"])
     
-    if page == "Data Exploration":
-        st.header("Data Exploration")
+    if page == "Feature Importance":
+        st.header("Top 5 Most Important Features")
         
-        st.subheader("Dataset Overview")
-        st.write("First 5 rows of the dataset:")
-        st.write(df.head())
-        
-        st.write("\nDataset Info:")
-        buffer = io.StringIO()
-        df.info(buf=buffer)
-        st.text(buffer.getvalue())
-        
-        st.subheader("Summary Statistics")
-        st.write(df.describe())
-        
-        st.subheader("Missing Values")
-        st.write(df.isnull().sum())
-        
-        st.subheader("Class Distribution")
-        fig, ax = plt.subplots(figsize=(6, 4))
-        sns.countplot(x='Diabetes_binary', data=df, ax=ax)
-        plt.title('Distribution of Diabetes')
-        plt.xlabel('Diabetes (0 = No, 1 = Yes)')
-        plt.ylabel('Count')
-        st.pyplot(fig)
-        
-    elif page == "Feature Analysis":
-        st.header("Feature Analysis")
-        
-        # Select feature to analyze
-        feature = st.selectbox("Select feature to analyze", df.columns[1:])
-        
-        # Plot distribution by diabetes status
+        # Show feature importance plot
         fig, ax = plt.subplots(figsize=(10, 6))
-        if df[feature].nunique() <= 2:
-            sns.countplot(x=feature, hue='Diabetes_binary', data=df, ax=ax)
-        else:
-            sns.boxplot(x='Diabetes_binary', y=feature, data=df, ax=ax)
-        plt.title(f'Distribution of {feature} by Diabetes Status')
-        plt.xlabel('Diabetes (0 = No, 1 = Yes)')
-        plt.ylabel(feature)
+        sns.barplot(x='Importance', y='Feature', data=importance.head(5), ax=ax)
+        plt.title('Top 5 Important Features for Diabetes Prediction')
         st.pyplot(fig)
         
-        # Correlation with diabetes
-        corr = df[['Diabetes_binary', feature]].corr().iloc[0,1]
-        st.write(f"Correlation with diabetes: {corr:.2f}")
+        # Show description of each feature
+        st.subheader("Feature Descriptions")
+        feature_descriptions = {
+            "HighBP": "Have you ever been told you have high blood pressure? (0=No, 1=Yes)",
+            "HighChol": "Have you ever been told you have high cholesterol? (0=No, 1=Yes)",
+            "BMI": "Body Mass Index (weight in kg/(height in m)^2)",
+            "GenHlth": "Would you say your general health is: (1=Excellent, 5=Poor)",
+            "Age": "Age in years (13-level category)"
+        }
         
-    elif page == "Prediction":
-        st.header("Diabetes Risk Prediction")
-        
-        # Prepare data for modeling
-        X = df.drop('Diabetes_binary', axis=1)
-        y = df['Diabetes_binary']
-        
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # Scale features
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        
-        # Train model
-        model = RandomForestClassifier(random_state=42)
-        model.fit(X_train_scaled, y_train)
+        for feature in top_5_features:
+            st.write(f"**{feature}**: {feature_descriptions.get(feature, 'No description available')}")
+    
+    elif page == "Model Performance":
+        st.header("Model Performance with Top 5 Features")
         
         # Make predictions
-        y_pred = model.predict(X_test_scaled)
+        y_pred = model_top5.predict(X_test_scaled)
         
         # Display metrics
-        st.subheader("Model Performance")
+        st.subheader("Accuracy Score")
         accuracy = accuracy_score(y_test, y_pred)
         st.write(f"Accuracy: {accuracy:.2f}")
         
@@ -136,56 +124,37 @@ def main():
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         st.pyplot(fig)
+    
+    elif page == "Prediction":
+        st.header("Diabetes Risk Prediction")
+        st.write("Enter values for the top 5 most important health indicators:")
         
-        # Feature importance
-        st.subheader("Feature Importance")
-        importance = pd.DataFrame({
-            'Feature': X.columns,
-            'Importance': model.feature_importances_
-        }).sort_values('Importance', ascending=False)
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        sns.barplot(x='Importance', y='Feature', data=importance.head(10), ax=ax)
-        plt.title('Top 10 Important Features')
-        st.pyplot(fig)
-        
-        # Prediction form
-        st.subheader("Make a Prediction")
-        st.write("Enter health indicators to predict diabetes risk:")
-        
-        # Create input fields for all features
+        # Create input fields for top 5 features
         inputs = {}
-        cols = st.columns(3)  # Create 3 columns for better layout
+        cols = st.columns(2)  # Create 2 columns for better layout
         
-        # Organize features into columns
-        features_per_col = (len(X.columns) + 2) // 3  # Ensure even distribution
+        # First column
+        with cols[0]:
+            for feature in top_5_features[:3]:
+                inputs[feature] = create_input_widget(feature, df[feature])
         
-        for i, col in enumerate(X.columns):
-            # Determine which column to use
-            col_idx = i // features_per_col
-            if col_idx >= 3:  # Safety check
-                col_idx = 2
-                
-            with cols[col_idx]:
-                value, widget_type = create_input_widget(col, df[col])
-                if widget_type != "fixed":
-                    inputs[col] = value
-                else:
-                    st.write(f"{col}: {value} (fixed value)")
-                    inputs[col] = value
-        
-        # Create dataframe from inputs in the correct feature order
-        input_df = pd.DataFrame([inputs])[X.columns]
+        # Second column
+        with cols[1]:
+            for feature in top_5_features[3:]:
+                inputs[feature] = create_input_widget(feature, df[feature])
         
         # Make prediction
         if st.button("Predict Diabetes Risk"):
             try:
+                # Create dataframe from inputs in the correct feature order
+                input_df = pd.DataFrame([inputs])[top_5_features]
+                
                 # Scale input
                 input_scaled = scaler.transform(input_df)
                 
                 # Get prediction and probability
-                prediction = model.predict(input_scaled)[0]
-                probability = model.predict_proba(input_scaled)[0][1]
+                prediction = model_top5.predict(input_scaled)[0]
+                probability = model_top5.predict_proba(input_scaled)[0][1]
                 
                 # Display results
                 st.subheader("Prediction Results")
@@ -201,6 +170,11 @@ def main():
                 - Probability 30-70%: Moderate risk
                 - Probability > 70%: High risk
                 """)
+                
+                # Show feature values used
+                st.write("\n**Input Values Used:**")
+                for feature, value in inputs.items():
+                    st.write(f"- {feature}: {value}")
                 
             except Exception as e:
                 st.error(f"An error occurred during prediction: {str(e)}")
