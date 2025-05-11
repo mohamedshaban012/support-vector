@@ -156,7 +156,7 @@ def train_and_evaluate_model(df):
     
     return grid_search.best_estimator_, selector, pca, selected_features
 
-def show_prediction(model, selector, pca, selected_features):
+def show_prediction(model, selector, pca, selected_features, df):
     st.header("Diabetes Risk Prediction")
     
     st.subheader("Make a Prediction")
@@ -255,7 +255,6 @@ def main():
     """)
     
     # Load data
-    global df
     df = load_data()
     
     if df is None:
@@ -281,6 +280,7 @@ def main():
             st.session_state['selector'] = selector
             st.session_state['pca'] = pca
             st.session_state['selected_features'] = selected_features
+            st.session_state['df'] = df  # Store df in session state
         else:
             st.info("Model already trained. Go to Prediction page.")
     elif page == "Prediction":
@@ -291,7 +291,8 @@ def main():
                 st.session_state['model'],
                 st.session_state['selector'],
                 st.session_state['pca'],
-                st.session_state['selected_features']
+                st.session_state['selected_features'],
+                st.session_state['df']  # Pass df from session state
             )
 
 if __name__ == "__main__":
