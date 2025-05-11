@@ -21,7 +21,22 @@ def load_data():
     df = pd.read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
     return df
 
-# Main function
+def create_input_widget(col, series):
+    """Helper function to create appropriate input widget based on data type"""
+    if series.nunique() <= 2:  # Binary feature
+        return st.selectbox(col, sorted(series.unique()), "select"
+    else:  # Numeric feature
+        min_val = float(series.min())
+        max_val = float(series.max())
+        value = float(series.median())
+        
+        # Handle case where min and max are equal
+        if min_val == max_val:
+            return min_val, "fixed"
+        
+        step = 1.0 if series.dtype == 'float64' else 1.0
+        return st.slider(col, min_val, max_val, value, step=step), "slider"
+
 def main():
     st.title("Diabetes Prediction App")
     st.write("""
@@ -138,36 +153,31 @@ def main():
         st.subheader("Make a Prediction")
         st.write("Enter health indicators to predict diabetes risk:")
         
-        # Create input fields for all features in the correct order
+        # Create input fields for all features
         inputs = {}
         cols = st.columns(3)  # Create 3 columns for better layout
         
-        # Get feature ranges for sliders
-        feature_ranges = {col: (df[col].min(), df[col].max()) for col in X.columns}
-        
-        # Organize features into the columns
-        features_per_col = len(X.columns) // 3
-        remaining = len(X.columns) % 3
+        # Organize features into columns
+        features_per_col = (len(X.columns) // 3
+        if len(X.columns) % 3 != 0:
+            features_per_col += 1
         
         for i, col in enumerate(X.columns):
             # Determine which column to use
-            col_idx = min(i // (features_per_col + (1 if i < remaining else 0)), 2)
-            
+            col_idx = i // features_per_col
+            if col_idx >= 3:  # Safety check
+                col_idx = 2
+                
             with cols[col_idx]:
-                if df[col].nunique() == 2:  # Binary feature
-                    inputs[col] = st.selectbox(col, [0, 1], key=col)
+                value, widget_type = create_input_widget(col, df[col])
+                if widget_type != "fixed":
+                    inputs[col] = value
                 else:
-                    min_val, max_val = feature_ranges[col]
-                    if col in ['BMI', 'Age']:  # Example of specific handling for certain features
-                        step = 1.0 if col == 'BMI' else 1
-                        inputs[col] = st.slider(col, float(min_val), float(max_val), 
-                                              float(df[col].median()), step=step, key=col)
-                    else:
-                        inputs[col] = st.slider(col, int(min_val), int(max_val), 
-                                              int(df[col].median()), key=col)
+                    st.write(f"{col}: {value} (fixed value)")
+                    inputs[col] = value
         
         # Create dataframe from inputs in the correct feature order
-        input_df = pd.DataFrame([inputs])[X.columns]  # Ensure same column order as training data
+        input_df = pd.DataFrame([inputs])[X.columns]
         
         # Make prediction
         if st.button("Predict Diabetes Risk"):
