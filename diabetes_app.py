@@ -22,17 +22,36 @@ sns.set(style="whitegrid")
 @st.cache_data
 def load_data():
     try:
-        # Load from URL (recommended for deployment)
-        url = "https://raw.githubusercontent.com/yourusername/repo/main/diabetes_binary_5050split_health_indicators_BRFSS2015.csv"
-        df = pd.read_csv(url)
+        # Updated working URL
+        url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.csv"
+        df = pd.read_csv(url, header=None)
         
-        # Alternatively, for local development with file in same directory:
-        # df = pd.read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
+        # Add column names to match the expected format
+        columns = [
+            'Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 
+            'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age', 'Diabetes_binary'
+        ]
+        df.columns = columns
         
+        st.success("Dataset loaded successfully from GitHub!")
         return df
+        
     except Exception as e:
-        st.error(f"Failed to load data: {str(e)}")
-        return None
+        st.warning(f"Failed to load from URL: {str(e)}")
+        st.info("Trying local file...")
+        
+        try:
+            # For local development
+            df = pd.read_csv("diabetes.csv")
+            st.success("Dataset loaded successfully from local file!")
+            return df
+        except:
+            st.error("""
+            Failed to load data. Please ensure:
+            1. For online use: Internet connection is available
+            2. For local use: Place 'diabetes.csv' in same directory
+            """)
+            return None
 
 def show_data_exploration(df):
     st.header("Data Exploration")
@@ -59,7 +78,7 @@ def show_feature_analysis(df):
     st.header("Feature Analysis")
     
     # Select feature to analyze
-    feature = st.selectbox("Select feature to analyze", df.columns[1:])
+    feature = st.selectbox("Select feature to analyze", df.columns[:-1])  # Exclude target
     
     # Plot distribution
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -128,31 +147,6 @@ def show_prediction(df):
     st.subheader("Make a Prediction")
     st.write("Enter health indicators to predict diabetes risk:")
     
-    # Create default values dictionary
-    default_values = {
-        'HighBP': 0,
-        'HighChol': 0,
-        'CholCheck': 1,
-        'BMI': 25,
-        'Smoker': 0,
-        'Stroke': 0,
-        'HeartDiseaseorAttack': 0,
-        'PhysActivity': 1,
-        'Fruits': 1,
-        'Veggies': 1,
-        'HvyAlcoholConsump': 0,
-        'AnyHealthcare': 1,
-        'NoDocbcCost': 0,
-        'GenHlth': 3,
-        'MentHlth': 0,
-        'PhysHlth': 0,
-        'DiffWalk': 0,
-        'Sex': 0,
-        'Age': 5,
-        'Education': 4,
-        'Income': 6
-    }
-    
     # Create input fields for top 5 features
     top_features = importance['Feature'].head(5).tolist()
     inputs = {}
@@ -161,31 +155,33 @@ def show_prediction(df):
     
     with col1:
         for feature in top_features[:3]:
-            if df[feature].nunique() == 2:  # Binary feature
-                inputs[feature] = st.selectbox(feature, [0, 1], index=default_values[feature])
-            else:
-                min_val = int(df[feature].min())
-                max_val = int(df[feature].max())
-                default_val = default_values[feature]
-                inputs[feature] = st.slider(feature, min_val, max_val, default_val)
+            min_val = float(df[feature].min())
+            max_val = float(df[feature].max())
+            default_val = float(df[feature].median())
+            inputs[feature] = st.slider(
+                feature, 
+                min_val, 
+                max_val, 
+                default_val,
+                help=f"Range: {min_val}-{max_val}"
+            )
     
     with col2:
         for feature in top_features[3:5]:
-            if df[feature].nunique() == 2:  # Binary feature
-                inputs[feature] = st.selectbox(feature, [0, 1], index=default_values[feature])
-            else:
-                min_val = int(df[feature].min())
-                max_val = int(df[feature].max())
-                default_val = default_values[feature]
-                inputs[feature] = st.slider(feature, min_val, max_val, default_val)
+            min_val = float(df[feature].min())
+            max_val = float(df[feature].max())
+            default_val = float(df[feature].median())
+            inputs[feature] = st.slider(
+                feature, 
+                min_val, 
+                max_val, 
+                default_val,
+                help=f"Range: {min_val}-{max_val}"
+            )
     
-    # Create input dataframe with ALL features in correct order
-    input_data = {}
-    for feature in X.columns:
-        if feature in inputs:  # If user provided this feature
-            input_data[feature] = inputs[feature]
-        else:  # Set default value for other features
-            input_data[feature] = default_values.get(feature, 0)
+    # Set default values for other features
+    default_values = {col: float(df[col].median()) for col in X.columns}
+    input_data = {**default_values, **inputs}
     
     # Convert to DataFrame with same column order as training data
     input_df = pd.DataFrame([input_data])[X.columns]
@@ -193,37 +189,47 @@ def show_prediction(df):
     # Make prediction
     if st.button("Predict Diabetes Risk"):
         try:
-            # Scale input (now with correct feature order)
             input_scaled = scaler.transform(input_df)
-            
-            # Get prediction and probability
             prediction = model.predict(input_scaled)[0]
             probability = model.predict_proba(input_scaled)[0][1]
             
             if prediction == 1:
-                st.error(f"High risk of diabetes (probability: {probability:.2%})")
+                st.error(f"High risk of diabetes ({probability:.1%} probability)")
+                st.info("Consult with a healthcare professional.")
             else:
-                st.success(f"Low risk of diabetes (probability: {probability:.2%})")
+                st.success(f"Low risk of diabetes ({probability:.1%} probability)")
+                st.info("Maintain healthy lifestyle habits.")
                 
         except Exception as e:
             st.error(f"Prediction failed: {str(e)}")
-            st.write("Debug Info:")
-            st.write("Input features:", input_df.columns.tolist())
-            st.write("Expected features:", X.columns.tolist())
-            st.write("Input values:", input_data)
 
 def main():
     st.title("Diabetes Prediction App")
     st.write("""
-    This app analyzes health indicators to predict diabetes risk.
-    The dataset is from the BRFSS 2015 survey with a 50-50 split of diabetes cases.
+    This app analyzes health indicators to predict diabetes risk using the Pima Indians Diabetes Dataset.
     """)
     
     # Load data
     df = load_data()
     
     if df is None:
-        st.stop()
+        st.info("""
+        Using sample data for demonstration. For full functionality:
+        1. Download the dataset from [Kaggle](https://www.kaggle.com/datasets/uciml/pima-indians-diabetes-database)
+        2. Save as 'diabetes.csv' in the same directory
+        """)
+        # Create sample data
+        df = pd.DataFrame({
+            'Pregnancies': [6, 1, 8],
+            'Glucose': [148, 85, 183],
+            'BloodPressure': [72, 66, 64],
+            'SkinThickness': [35, 29, 0],
+            'Insulin': [0, 0, 0],
+            'BMI': [33.6, 26.6, 23.3],
+            'DiabetesPedigreeFunction': [0.627, 0.351, 0.672],
+            'Age': [50, 31, 32],
+            'Diabetes_binary': [1, 0, 1]
+        })
     
     # Sidebar navigation
     st.sidebar.header("Navigation")
