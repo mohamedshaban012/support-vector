@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import io
 
 # Set page config
 st.set_page_config(page_title="Diabetes Prediction", page_icon="🩺", layout="wide")
@@ -137,52 +138,64 @@ def main():
         st.subheader("Make a Prediction")
         st.write("Enter health indicators to predict diabetes risk:")
         
-        # Create input fields for top 5 features
-        top_features = importance['Feature'].head(5).tolist()
+        # Create input fields for all features in the correct order
         inputs = {}
+        cols = st.columns(3)  # Create 3 columns for better layout
         
-        col1, col2 = st.columns(2)
+        # Get feature ranges for sliders
+        feature_ranges = {col: (df[col].min(), df[col].max()) for col in X.columns}
         
-        with col1:
-            for feature in top_features[:3]:
-                if df[feature].nunique() == 2:  # Binary feature
-                    inputs[feature] = st.selectbox(feature, [0, 1])
+        # Organize features into the columns
+        features_per_col = len(X.columns) // 3
+        remaining = len(X.columns) % 3
+        
+        for i, col in enumerate(X.columns):
+            # Determine which column to use
+            col_idx = min(i // (features_per_col + (1 if i < remaining else 0)), 2)
+            
+            with cols[col_idx]:
+                if df[col].nunique() == 2:  # Binary feature
+                    inputs[col] = st.selectbox(col, [0, 1], key=col)
                 else:
-                    min_val = int(df[feature].min())
-                    max_val = int(df[feature].max())
-                    inputs[feature] = st.slider(feature, min_val, max_val)
+                    min_val, max_val = feature_ranges[col]
+                    if col in ['BMI', 'Age']:  # Example of specific handling for certain features
+                        step = 1.0 if col == 'BMI' else 1
+                        inputs[col] = st.slider(col, float(min_val), float(max_val), 
+                                              float(df[col].median()), step=step, key=col)
+                    else:
+                        inputs[col] = st.slider(col, int(min_val), int(max_val), 
+                                              int(df[col].median()), key=col)
         
-        with col2:
-            for feature in top_features[3:5]:
-                if df[feature].nunique() == 2:  # Binary feature
-                    inputs[feature] = st.selectbox(feature, [0, 1])
-                else:
-                    min_val = int(df[feature].min())
-                    max_val = int(df[feature].max())
-                    inputs[feature] = st.slider(feature, min_val, max_val)
-        
-        # Add remaining features with default values
-        for feature in X.columns:
-            if feature not in inputs:
-                inputs[feature] = 0  # Default value
-        
-        # Create dataframe from inputs
-        input_df = pd.DataFrame([inputs])
+        # Create dataframe from inputs in the correct feature order
+        input_df = pd.DataFrame([inputs])[X.columns]  # Ensure same column order as training data
         
         # Make prediction
         if st.button("Predict Diabetes Risk"):
-            # Scale input
-            input_scaled = scaler.transform(input_df)
-            
-            # Get prediction and probability
-            prediction = model.predict(input_scaled)[0]
-            probability = model.predict_proba(input_scaled)[0][1]
-            
-            if prediction == 1:
-                st.error(f"High risk of diabetes (probability: {probability:.2%})")
-            else:
-                st.success(f"Low risk of diabetes (probability: {probability:.2%})")
+            try:
+                # Scale input
+                input_scaled = scaler.transform(input_df)
+                
+                # Get prediction and probability
+                prediction = model.predict(input_scaled)[0]
+                probability = model.predict_proba(input_scaled)[0][1]
+                
+                # Display results
+                st.subheader("Prediction Results")
+                if prediction == 1:
+                    st.error(f"High risk of diabetes (probability: {probability:.2%})")
+                else:
+                    st.success(f"Low risk of diabetes (probability: {probability:.2%})")
+                
+                # Show interpretation
+                st.write("""
+                **Interpretation:**
+                - Probability < 30%: Low risk
+                - Probability 30-70%: Moderate risk
+                - Probability > 70%: High risk
+                """)
+                
+            except Exception as e:
+                st.error(f"An error occurred during prediction: {str(e)}")
 
 if __name__ == "__main__":
-    import io
     main()
